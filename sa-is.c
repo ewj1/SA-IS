@@ -3,9 +3,15 @@
 #include <string.h>
 #include <stdlib.h>
 
-const int alphabetSize = 256;
+static const char* currentStr; //needs to be a global var for qsort comparison function
 
-static const char* currentStr;
+int* convertString(char* str, int len){
+    int* convertedString = malloc(len*sizeof(int));
+    for (int i = 0; i < len; i++){
+        convertedString[i] = (int)(str[i]);
+    }
+    return convertedString;
+}
 
 int compareSuffixes(const void* a, const void* b) {
     int idxA = *((int*)a);
@@ -14,14 +20,14 @@ int compareSuffixes(const void* a, const void* b) {
     return strcmp(currentStr + idxA, currentStr + idxB);
 }
 
-void naiveSA(char* str, int* suffixArray){
-    int len = strlen(str) + 1;
-
+int* naiveSA(char* str, int len){
+    int* suffixArray = malloc(len*sizeof(int));
     for (int i = 0; i < len; i++) {
         suffixArray[i] = i;
     }
     currentStr = str;
     qsort(suffixArray, len, sizeof(int), compareSuffixes);
+    return suffixArray;
 }
 
 void printSA(int* SA, int len){
@@ -33,34 +39,35 @@ void printSA(int* SA, int len){
 }
 
 
-//SA-IS algorithm
+//------------------SA-IS algorithm----------------------------------------
 
 //output is one character longer than length of string (for empty suffix)
-void typeMap(char* str, int len, char* output){
-
+char* createTypeMap(int* str, int len){
+    char* typemap = (char*)calloc(len, sizeof(char));
     //empty suffix always S-type
-    output[-1] = 'S';
+    typemap[-1] = 'S';
 
     //empty string check
-    if(len==0){
-        return;
+    if(len==1){
+        return typemap;
     }
 
     //character before empty suffix is always L-type
-    output[-2] = 'L';
+    typemap[-2] = 'L';
 
     //fill out types right to left
-    for (int i = len - 2; i > 0; i--){
+    for (int i = len - 3; i > 0; i--){
         if (str[i] > str[i + 1]){
-            output[i] = 'L';
+            typemap[i] = 'L';
         }
         else if (str[i] < str[i + 1]){
-            output[i] = 'S';
+            typemap[i] = 'S';
         }
         else {
-            output[i] = output[i + 1];
+            typemap[i] = typemap[i + 1];
         }
     }
+    return typemap;
 }
 
 int isLMS(int idx, char* typemap){
@@ -71,12 +78,12 @@ int isLMS(int idx, char* typemap){
     return 0;
 }
 
-int areLMSblocksEqual(char* str, int idxA, int idxB, char* typemap){
+int areLMSblocksEqual(int* str, int idxA, int idxB, char* typemap){
 
     int i = 0;
     while(1){
-        int aIsLMS = isLMS(idxA, typemap);
-        int bIsLMS = isLMS(idxB, typemap);
+        int aIsLMS = isLMS(idxA+i, typemap);
+        int bIsLMS = isLMS(idxB+i, typemap);
 
         if (i > 0 && aIsLMS && bIsLMS){
             return 1;
@@ -87,72 +94,61 @@ int areLMSblocksEqual(char* str, int idxA, int idxB, char* typemap){
         else if (str[idxA+i] != str[idxB+i]){
             return 0;
         }
-
         i++;
     }
 }
 
-//alphabetSize will be 256 by default when we call the function
-//output will be calloced to 0 for all 256 elements.
-void findBucketSizes(char* str, int* output) {
-    for (int i = 0; i < strlen(str); i++) {
-        output[(int)str[i]]++;
+//output will be calloced to 0 and length of alphabet.
+int* findBucketSizes(int* str, int len, int alphabetSize) {
+    int* bucketSizes = calloc(alphabetSize, sizeof(int));
+    for (int i = 0; i < len; i++) {
+        bucketSizes[(int)str[i]]++;
     }
+    return bucketSizes;
 }
 
 //len of bucketSizes will be alphabetSize
 //output is calloced to 0
-void findBucketHeads(int*bucketSizes, int* output) {
-    int idx = 1;
+int* findBucketHeads(int* bucketSizes, int alphabetSize) {
+    int* output = calloc(alphabetSize, sizeof(int));
+    int idx = 1; //empty suffix at start
     for (int i = 0; i < alphabetSize; i++) {
-        if (bucketSizes[i] > 0) {
-            output[i] = idx;
-            idx += bucketSizes[i];
-        }
-        
+        output[i] = idx;
+        idx += bucketSizes[i];   
     }
+    return output;
 }
 
 //len of bucketSizes will be alphabetSize
 //output is calloced to 0
-void findBucketTails(int*bucketSizes, int* output) {
+int* findBucketTails(int* bucketSizes, int alphabetSize) {
+    int* output = calloc(alphabetSize, sizeof(int));
     int idx = 1;
     for (int i = 0; i < alphabetSize; i++) {
-        if (bucketSizes[i] > 0) {
-            idx += bucketSizes[i];
-            output[i] = idx - 1;
-            
-        }
-        
+        idx += bucketSizes[i];
+        output[i] = idx - 1;
     }
+    return output;
 }
 
-// Make a suffix array of LMS-substrings that is almost correct 
-// -1 represents locations of suffixes that don't begin with an LMS character
-void blockLMSsort(char* str, int* bucketSizes, char* typemap, int* output){
-    int len = strlen(str) + 1;
-    int* bucketTails = (int*)calloc(alphabetSize, sizeof(int));
-    findBucketTails(bucketSizes, bucketTails);
+//LMSs are LMS suffixes or blocks, sorted or unsorted depending on context of call
+int* inducedSort(int* str, int len, int alphabetSize, int* LMSs, int numLMS, int* bucketSizes, char* typemap){
+    int* SA = malloc(len * sizeof(int));
 
-    memset(output, -1, len * sizeof(int));
+    // Place LMS suffixes
+    int* bucketTails = findBucketTails(bucketSizes, alphabetSize);
+    memset(SA, -1, len * sizeof(int));
 
-    for (int i = 0; i < strlen(str), i++;) {
-        if (!isLMS(i, typemap)) {
-            continue;
-        }
-        int bucketIndex = (int)str[i];
-        output[bucketTails[bucketIndex]] = i;
-        bucketTails[bucketIndex]--;
+    for (int i = 0; i < numLMS, i++;) {
+            int c = str[LMSs[i]];
+            SA[bucketTails[c]] = i;
+            bucketTails[c]--;
     }
-    output[0] = strlen(str);
+    SA[0] = len; //empty suffix at front
     free(bucketTails);
-}
 
-// Induce L-type suffixes
-void induceSortL(char* str, int* SA, int* bucketSizes, char* typemap) {
-    int len = strlen(str) + 1;
-    int* bucketHeads = (int*)calloc(alphabetSize, sizeof(int));
-    findBucketHeads(bucketSizes, bucketHeads);
+    // Place L-type suffixes
+    int* bucketHeads = findBucketHeads(bucketSizes, alphabetSize);
 
     for (int i = 0; i < len; i++) {
         if (SA[i] > 0 && typemap[SA[i] - 1] == 'L') {
@@ -162,13 +158,9 @@ void induceSortL(char* str, int* SA, int* bucketSizes, char* typemap) {
         }
     }
     free(bucketHeads);
-}
 
-// Induce S-type suffixes
-void induceSortS(char* str, int* SA, int* bucketSizes, char* typemap) {
-    int len = strlen(str) + 1;
-    int* bucketTails = (int*)calloc(alphabetSize, sizeof(int));
-    findBucketTails(bucketSizes, bucketTails);
+    // Place S-type suffixes
+    bucketTails = findBucketTails(bucketSizes, alphabetSize);
 
     for (int i = len - 1; i >= 0; i--) {
         if (SA[i] > 0 && typemap[SA[i] - 1] == 'S') {
@@ -178,123 +170,159 @@ void induceSortS(char* str, int* SA, int* bucketSizes, char* typemap) {
         }
     }
     free(bucketTails);
+
+    return SA;
 }
 
-// Summarize LMS substrings into a smaller problem
-void summarizeSuffixArray(char* str, int* SA, char* typemap, int* summaryString, int* summaryOffsets) {
-    int len = strlen(str) + 1;
-    int summaryIndex = 0;
-    int lastLMS = -1;
-
-    memset(summaryString, -1, len * sizeof(int));
-
-    for (int i = 0; i < len; i++) {
-        if (isLMS(SA[i], typemap)) {
-            if (lastLMS == -1 || !areLMSblocksEqual((char*)str, lastLMS, SA[i], typemap)) {
-                summaryIndex++;
-            }
-            summaryString[SA[i]] = summaryIndex;
-            lastLMS = SA[i];
+// extract just the LMS block indices
+int* extractSortedLMSBlocks(int* SA, int len, int numLMS, char* typemap){
+    int* sortedLMSBlocks = malloc(numLMS*sizeof(int));
+    int j = 0;
+    for (int i = 0; i < len; i++){
+        if (isLMS(SA[i], typemap)){
+            sortedLMSBlocks[j] = SA[i];
+            j++;
         }
     }
-
-    // Create a dense representation of the summary string
-    int offsetIndex = 0;
-    for (int i = 0; i < len; i++) {
-        if (summaryString[i] >= 0) {
-            summaryOffsets[offsetIndex] = i;
-            offsetIndex++;
-        }
-    }
+    return sortedLMSBlocks;
 }
 
-// Construct a suffix array for the summary string
-void makeSummarySuffixArray(int strlen, int* summaryString, int summaryLen, int* summarySA) {
-    if (summaryLen == strlen) {
-        memset(summarySA, -1, (summaryLen + 1) * sizeof(int));
-        summarySA[0] = summaryLen;
-        for (int i = 0; i < summaryLen; i++) {
-            int c = summaryString[i];
-            summarySA[c + 1] = i;
+// Takes sorted LMS blocks and assign each block a character
+// Reorders these characters to the order the blocks appeared in the original string
+int* createShorterString(int* str, int len, int* sortedLMSBlocks, int numLMS, char* typemap, int* numBlockIDs) {
+    int blockAssignments[len];
+    int blockID = 0; 
+    memset(blockAssignments, -1, len*sizeof(int));
+    blockAssignments[0] = 0;
+
+    for (int i = 1; i < numLMS; i++){
+        if (!areLMSblocksEqual(str, sortedLMSBlocks[i-1], sortedLMSBlocks[i], typemap)){
+            blockID++;
         }
-    } else {
-        makeSuffixArrayByInducedSorting((char*)summaryString, summarySA);
+        blockAssignments[sortedLMSBlocks[i]] = blockID;
     }
-}
+    *numBlockIDs = blockID;
 
-// Sort LMS substrings accurately using the summary suffix array
-void accurateLMSSort(char* str, int* bucketSizes, char* typemap, int* summarySA, int* summaryOffsets, int* SA) {
-    int len = strlen(str) + 1;
-    int* bucketTails = (int*)calloc(alphabetSize, sizeof(int));
-    findBucketTails(bucketSizes, bucketTails);
-
-    memset(SA, -1, len * sizeof(int));
-    for (int i = len - 1; i >= 0; i--) {
-        if (summarySA[i] > 0) {
-            int c = (int)str[summaryOffsets[summarySA[i]]];
-            SA[bucketTails[c]] = summaryOffsets[summarySA[i]];
-            bucketTails[c]--;
+    int* shorterString = malloc(numLMS * sizeof(int));
+    int j = 0;
+    for (int i = 0; i < len; i++){
+        if (blockAssignments[i] > -1){
+            shorterString[j] = blockAssignments[i];
+            j++;
         }
     }
-    free(bucketTails);
+    return shorterString;
 }
 
 // Main SA-IS algorithm to construct the suffix array
-void makeSuffixArrayByInducedSorting(char* str, int* SA) {
-    int len = strlen(str) + 1;
-    char* typemap = (char*)calloc(len + 1, sizeof(char));
-    typeMap(str, len - 1, typemap);
+int* SAIS(int* str, int len, int alphabetSize, int** output) {
 
-    int* bucketSizes = (int*)calloc(alphabetSize, sizeof(int));
-    findBucketSizes(str, bucketSizes);
-
-    // Step 1: Sort LMS substrings
-    blockLMSsort(str, bucketSizes, typemap, SA);
-
-    // Step 2: Induce L and S suffixes
-    induceSortL(str, SA, bucketSizes, typemap);
-    induceSortS(str, SA, bucketSizes, typemap);
-
-    // Step 3: Summarize suffix array
-    int* summaryString = (int*)calloc(len, sizeof(int));
-    int* summaryOffsets = (int*)calloc(len, sizeof(int));
-    summarizeSuffixArray(str, SA, typemap, summaryString, summaryOffsets);
-
-    // Step 4: Calclulate true length of summary suffix array
-    int summaryLen = 0;
-    for (int i = 0; i < len; i++) {
-        if (summaryString[i] != -1) {
-            summaryLen++;
+    char* typemap = createTypeMap(str, len);
+    int* bucketSizes = findBucketSizes(str, len, alphabetSize);
+    
+    //find LMS suffixes
+    int* LMSSuffixes = calloc(len, sizeof(int));
+    int numLMS = 0;
+    for (int i = 1; i < len; i++){
+        if (isLMS(i, typemap)){
+            LMSSuffixes[numLMS] = i;
+            numLMS++;
         }
     }
+    //preliminary sort to get LMS blocks in sorted order
+    int* SA = inducedSort(str, len, alphabetSize, LMSSuffixes, numLMS, bucketSizes, typemap);
+    int* sortedLMSBlocks = extractSortedLMSBlocks(SA, len, numLMS, typemap);
 
-    int* summarySA = (int*)calloc(summaryLen, sizeof(int));
-    makeSummarySuffixArray(len, summaryString, summaryLen, summarySA);
+    int numBlockIDs;
+    int* shorterString = createShorterString(str, len, sortedLMSBlocks, numLMS, typemap, &numBlockIDs);
 
-    // Step 5: Accurately sort LMS substrings
-    accurateLMSSort(str, bucketSizes, typemap, summarySA, summaryOffsets, SA);
+    int* SAofShorterString = malloc(numLMS * sizeof(int));
+    if (numBlockIDs == numLMS-1) { //base case, all unique
+        for (int i = 0; i < numLMS; i++) {
+            SAofShorterString[shorterString[i]] = i;
+        }
+    } else {
+        SAIS(shorterString, numLMS, numBlockIDs, &SAofShorterString);
+    }
 
-    // Step 6: Induce final L and S suffixes
-    induceSortL(str, SA, bucketSizes, typemap);
-    induceSortS(str, SA, bucketSizes, typemap);
+    // at this point, SAofShorterString is the sorted order of LMS suffixes
+    int sortedLMSSuffixes[numLMS];
+    for (int i = 0; i < numLMS; i++){
+        sortedLMSSuffixes[i] = LMSSuffixes[SAofShorterString[i]];
+    }
+
+    //finally we perform an induced sort to obtain the suffix array of the original string
+    int* finalSA = inducedSort(str, len, alphabetSize, sortedLMSSuffixes, numLMS, bucketSizes, typemap);
 
     // Free allocated memory
-    free(typemap);
-    free(bucketSizes);
-    free(summaryString);
-    free(summaryOffsets);
-    free(summarySA);
+    // free(typemap);
+    // free(bucketSizes);
+    // free(LMSSuffixes);
+    // free(SA);
+    // free(sortedLMSBlocks);
+    // free(shorterString);
+    printf("recursion");
+    printSA(finalSA, len);
+    *output = finalSA;
 }
 
 
 int main() {
     char* str = "banana";
     int len = strlen(str) + 1;
-    int suffixArray[len];
-    naiveSA(str, suffixArray);
-    printSA(suffixArray, len);
-    makeSuffixArrayByInducedSorting(str, suffixArray);
+    // int* suffixArray = naiveSA(str, len);
+    // printSA(suffixArray, len);
+    int* suffixArray = malloc(len*sizeof(int));
+    int* convertedString = convertString(str, len);
+    printSA(convertedString, len);
+    SAIS(convertedString, len, 256, &suffixArray); //assumes 256 alphabet initially
     printSA(suffixArray, len);
     return 0;
 }
 
+// // Place sorted LMS suffixes in character buckets
+// void inducedSortLMS(char* str, int len, int alphabetSize, int* sortedLMS, int numLMS, int* bucketSizes, char* typemap, int* output){
+
+//     int* bucketTails = (int*)calloc(alphabetSize, sizeof(int));
+//     findBucketTails(bucketSizes, alphabetSize, bucketTails);
+
+//     memset(output, -1, len * sizeof(int));
+
+//     for (int i = 0; i < numLMS, i++;) {
+//             int c = str[sortedLMS[i]];
+//             output[bucketTails[c]] = i;
+//             bucketTails[c]--;
+//     }
+//     output[0] = len; //empty suffix at front
+//     free(bucketTails);
+// }
+
+// // Place L-type suffixes
+// void inducedSortL(char* str, int len, int alphabetSize, int* SA, int* bucketSizes, char* typemap) {
+//     int* bucketHeads = (int*)calloc(alphabetSize, sizeof(int));
+//     findBucketHeads(bucketSizes, alphabetSize, bucketHeads);
+
+//     for (int i = 0; i < len; i++) {
+//         if (SA[i] > 0 && typemap[SA[i] - 1] == 'L') {
+//             int c = str[SA[i] - 1];
+//             SA[bucketHeads[c]] = SA[i] - 1;
+//             bucketHeads[c]++;
+//         }
+//     }
+//     free(bucketHeads);
+// }
+
+// // Place S-type suffixes
+// void inducedSortS(char* str, int len, int alphabetSize, int* SA, int* bucketSizes, char* typemap) {
+//     int* bucketTails = (int*)calloc(alphabetSize, sizeof(int));
+//     findBucketTails(bucketSizes, alphabetSize, bucketTails);
+
+//     for (int i = len - 1; i >= 0; i--) {
+//         if (SA[i] > 0 && typemap[SA[i] - 1] == 'S') {
+//             int c = str[SA[i] - 1];
+//             SA[bucketTails[c]] = SA[i] - 1;
+//             bucketTails[c]--;
+//         }
+//     }
+//     free(bucketTails);
+// }

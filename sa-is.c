@@ -2,8 +2,26 @@
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 
 static const char* currentStr; //needs to be a global var for qsort comparison function
+
+//convert file text to string
+char* read_file(FILE* file) {
+    fseek(file, 0, SEEK_END);
+    int len = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    char* str = malloc(sizeof(char)*(len + 1));
+    char c;
+    int i = 0;
+    while ( (c = fgetc(file)) != EOF) {
+        str[i] = c;
+        i++;
+    }
+    str[i] = '\0';
+    return str;
+
+}
 
 int* convertString(char* str, int len){
     int* convertedString = malloc(len*sizeof(int));
@@ -25,7 +43,7 @@ int* naiveSA(char* str, int len){
     for (int i = 0; i < len; i++) {
         suffixArray[i] = i;
     }
-    currentStr = str;
+    currentStr = str; //global var for compareSuffixes
     qsort(suffixArray, len, sizeof(int), compareSuffixes);
     return suffixArray;
 }
@@ -147,8 +165,6 @@ int* inducedSort(int* str, int len, int alphabetSize, int* LMSs, int numLMS, int
 
     // Place LMS suffixes
     int* bucketTails = findBucketTails(bucketSizes, alphabetSize);
-    // printf("bucket tails:");
-    // printSA(bucketTails, alphabetSize);
     memset(SA, -1, len * sizeof(int));
     // printf("numLMS: %d \n", numLMS);
     for (int i = numLMS-1; i >= 0; i--) {
@@ -159,8 +175,6 @@ int* inducedSort(int* str, int len, int alphabetSize, int* LMSs, int numLMS, int
     }
     SA[0] = len-1; //empty suffix at front
     free(bucketTails);
-    // printf("LMS placed: ");
-    // printSA(SA, len);
 
     // Place L-type suffixes
     int* bucketHeads = findBucketHeads(bucketSizes, alphabetSize);
@@ -175,9 +189,6 @@ int* inducedSort(int* str, int len, int alphabetSize, int* LMSs, int numLMS, int
     }
     free(bucketHeads);
 
-    // printf("L-types placed: ");
-    // printSA(SA, len);
-
     // Place S-type suffixes
     bucketTails = findBucketTails(bucketSizes, alphabetSize);
 
@@ -189,9 +200,6 @@ int* inducedSort(int* str, int len, int alphabetSize, int* LMSs, int numLMS, int
         }
     }
     free(bucketTails);
-
-    // printf("S-types placed: ");
-    // printSA(SA, len);
 
     return SA;
 }
@@ -224,8 +232,6 @@ int* createShorterString(int* str, int len, int* sortedLMSBlocks, int numLMS, ch
         blockAssignments[sortedLMSBlocks[i]] = blockID;
     }
     *numBlockIDs = blockID;
-    // printf("blockAssignments: ");
-    // printSA(blockAssignments, len);
 
     int* shorterString = malloc(numLMS * sizeof(int));
     int j = 0;
@@ -241,14 +247,10 @@ int* createShorterString(int* str, int len, int* sortedLMSBlocks, int numLMS, ch
 
 // Main SA-IS algorithm to construct the suffix array
 int* SAIS(int* str, int len, int alphabetSize, int** output) {
-    // printf("string: ");
-    // printSA(str, len);
+
     char* typemap = createTypeMap(str, len);
-    // printf("typemap: ");
-    // printTypemap(typemap, len);
     int* bucketSizes = findBucketSizes(str, len, alphabetSize);
-    // printf("bucketSizes: ");
-    // printSA(bucketSizes, alphabetSize);
+
     //find LMS suffixes
     int* LMSSuffixes = calloc(len, sizeof(int));
     int numLMS = 0;
@@ -258,14 +260,11 @@ int* SAIS(int* str, int len, int alphabetSize, int** output) {
             numLMS++;
         }
     }
-    // printf("LMS suffixes: ");
-    // printSA(LMSSuffixes, len);
-    // printf("numLMS: %d \n", numLMS);
+
     //preliminary sort to get LMS blocks in sorted order
     int* SA = inducedSort(str, len, alphabetSize, LMSSuffixes, numLMS, bucketSizes, typemap);
     int* sortedLMSBlocks = extractSortedLMSBlocks(SA, len, numLMS, typemap);
-    // printf("sortedLMSBlocks: ");
-    // printSA(sortedLMSBlocks, numLMS);
+
     int numBlockIDs;
     int* shorterString = createShorterString(str, len, sortedLMSBlocks, numLMS, typemap, &numBlockIDs);
 
@@ -287,7 +286,6 @@ int* SAIS(int* str, int len, int alphabetSize, int** output) {
     //finally we perform an induced sort to obtain the suffix array of the original string
     int* finalSA = inducedSort(str, len, alphabetSize, sortedLMSSuffixes, numLMS, bucketSizes, typemap);
 
-    // Free allocated memory
     free(SA);
     free(typemap);
     free(sortedLMSBlocks);
@@ -296,27 +294,12 @@ int* SAIS(int* str, int len, int alphabetSize, int** output) {
     free(shorterString);
     free(SAofShorterString);
     free(sortedLMSSuffixes);
+
     *output = finalSA;
 }
 
-//convert file text to string
-char* read_file(FILE* file) {
-    fseek(file, 0, SEEK_END);
-    int len = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    char* str = malloc(sizeof(char)*(len + 1));
-    char c;
-    int i = 0;
-    while ( (c = fgetc(file)) != EOF) {
-        str[i] = c;
-        i++;
-    }
-    str[i] = '\0';
-    return str;
-
-}
-
 int areArraysEqual(int* arr1, int* arr2, int len) {
+
     for (int i = 0; i < len; i++) {
         if (arr1[i] != arr2[i]) {
             return 0;
@@ -333,31 +316,38 @@ int main(int argc, char* argv[]) {
         //end program with error code
         exit(1);
     }
-
     FILE* file = fopen(argv[1], "r"); 
     if(file == NULL){
         printf("Error opening file %s.\n", argv[1]);
         exit(0);
     }
+
     char* str = read_file(file);
     fclose(file);
-    // char* str = "CGACTCCA ACAACAAGCT";
+    // hardcode example string for short test input
+    // char* str = "CGACTCCAACAACAAGCT";
+
     int len = strlen(str) + 1;
-    // printf("Last 4 characters of string: ");
-    // for (int i = len - 5; i < len; i++) {
-    //    printf("%d ", (int)str[i]);
-    // }
-    // printf("\n");
+    clock_t naive_start = clock();
     int* naiveSuffixArray = naiveSA(str, len);
+    clock_t naive_end = clock();
+    double naive_time = (double)(naive_end - naive_start) / CLOCKS_PER_SEC;
     // printf("Naive ");
     // printSA(naiveSuffixArray, len);
+
     int* suffixArray = malloc(len*sizeof(int));
     int* convertedString = convertString(str, len); //we convert to allow for recursive (integer) inputs later
+    clock_t SAIS_start = clock();
     SAIS(convertedString, len, 256, &suffixArray); //assumes 256 ASCII alphabet initially
+    clock_t SAIS_end = clock();
+    double SAIS_time = (double)(SAIS_end - SAIS_start) / CLOCKS_PER_SEC;
     // printf("SA-IS ");
     // printSA(suffixArray, len);
+
     if (areArraysEqual(naiveSuffixArray, suffixArray, len)) {
-        printf("Success\n");
+        printf("Success! Suffix arrays match.\n");
+        printf("Naive took %.6f seconds.\n", naive_time);
+        printf("SA-IS took %.6f seconds.\n", SAIS_time);
     }
     else {
         printf("Naive ");
@@ -366,9 +356,11 @@ int main(int argc, char* argv[]) {
         printSA(suffixArray, len);
         printf("Different suffix arrays from naive and SA-IS algorithms.\n");
     }
+
     free(naiveSuffixArray);
     free(suffixArray);
     free(convertedString);
     free(str);
+
     return 0;
 }

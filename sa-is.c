@@ -31,21 +31,27 @@ int* naiveSA(char* str, int len){
 }
 
 void printSA(int* SA, int len){
-    printf("Suffix Array: ");
+    printf("Array: ");
     for (int i = 0; i < len; i++) {
         printf("%d ", SA[i]);
     }
     printf("\n");
 }
 
-
+void printTypemap(char* typemap, int len){
+    printf("Typemap: ");
+    for (int i = 0; i < len; i++) {
+        printf("%c ", typemap[i]);
+    }
+    printf("\n");
+}
 //------------------SA-IS algorithm----------------------------------------
 
 //output is one character longer than length of string (for empty suffix)
 char* createTypeMap(int* str, int len){
-    char* typemap = (char*)calloc(len, sizeof(char));
+    char* typemap = malloc(len*sizeof(char));
     //empty suffix always S-type
-    typemap[-1] = 'S';
+    typemap[len-1] = 'S';
 
     //empty string check
     if(len==1){
@@ -53,10 +59,10 @@ char* createTypeMap(int* str, int len){
     }
 
     //character before empty suffix is always L-type
-    typemap[-2] = 'L';
+    typemap[len-2] = 'L';
 
     //fill out types right to left
-    for (int i = len - 3; i > 0; i--){
+    for (int i = len - 3; i >= 0; i--){
         if (str[i] > str[i + 1]){
             typemap[i] = 'L';
         }
@@ -111,7 +117,7 @@ int* findBucketSizes(int* str, int len, int alphabetSize) {
 //output is calloced to 0
 int* findBucketHeads(int* bucketSizes, int alphabetSize) {
     int* output = calloc(alphabetSize, sizeof(int));
-    int idx = 1; //empty suffix at start
+    int idx = 0;
     for (int i = 0; i < alphabetSize; i++) {
         output[i] = idx;
         idx += bucketSizes[i];   
@@ -123,10 +129,12 @@ int* findBucketHeads(int* bucketSizes, int alphabetSize) {
 //output is calloced to 0
 int* findBucketTails(int* bucketSizes, int alphabetSize) {
     int* output = calloc(alphabetSize, sizeof(int));
-    int idx = 1;
+    int idx = 0;
     for (int i = 0; i < alphabetSize; i++) {
-        idx += bucketSizes[i];
-        output[i] = idx - 1;
+        if(bucketSizes[i] > 0){
+            idx += bucketSizes[i];
+            output[i] = idx - 1;
+        }
     }
     return output;
 }
@@ -137,15 +145,20 @@ int* inducedSort(int* str, int len, int alphabetSize, int* LMSs, int numLMS, int
 
     // Place LMS suffixes
     int* bucketTails = findBucketTails(bucketSizes, alphabetSize);
+    // printf("bucket tails:");
+    // printSA(bucketTails, alphabetSize);
     memset(SA, -1, len * sizeof(int));
-
-    for (int i = 0; i < numLMS, i++;) {
+    // printf("numLMS: %d \n", numLMS);
+    for (int i = numLMS; i >= 0; i--) {
             int c = str[LMSs[i]];
-            SA[bucketTails[c]] = i;
+            // printf("c: %d \n", c);
+            SA[bucketTails[c]] = LMSs[i];
             bucketTails[c]--;
     }
-    SA[0] = len; //empty suffix at front
+    SA[0] = len-1; //empty suffix at front
     free(bucketTails);
+    printf("LMS placed: ");
+    printSA(SA, len);
 
     // Place L-type suffixes
     int* bucketHeads = findBucketHeads(bucketSizes, alphabetSize);
@@ -158,6 +171,9 @@ int* inducedSort(int* str, int len, int alphabetSize, int* LMSs, int numLMS, int
         }
     }
     free(bucketHeads);
+
+    printf("L-types placed: ");
+    printSA(SA, len);
 
     // Place S-type suffixes
     bucketTails = findBucketTails(bucketSizes, alphabetSize);
@@ -216,10 +232,14 @@ int* createShorterString(int* str, int len, int* sortedLMSBlocks, int numLMS, ch
 
 // Main SA-IS algorithm to construct the suffix array
 int* SAIS(int* str, int len, int alphabetSize, int** output) {
-
+    printf("string: ");
+    printSA(str, len);
     char* typemap = createTypeMap(str, len);
+    printf("typemap: ");
+    printTypemap(typemap, len);
     int* bucketSizes = findBucketSizes(str, len, alphabetSize);
-    
+    // printf("bucketSizes: ");
+    // printSA(bucketSizes, alphabetSize);
     //find LMS suffixes
     int* LMSSuffixes = calloc(len, sizeof(int));
     int numLMS = 0;
@@ -229,8 +249,12 @@ int* SAIS(int* str, int len, int alphabetSize, int** output) {
             numLMS++;
         }
     }
+    printf("LMS suffixes: ");
+    printSA(LMSSuffixes, len);
     //preliminary sort to get LMS blocks in sorted order
     int* SA = inducedSort(str, len, alphabetSize, LMSSuffixes, numLMS, bucketSizes, typemap);
+    printf("SA: ");
+    printSA(SA, len);
     int* sortedLMSBlocks = extractSortedLMSBlocks(SA, len, numLMS, typemap);
 
     int numBlockIDs;
@@ -261,68 +285,19 @@ int* SAIS(int* str, int len, int alphabetSize, int** output) {
     // free(SA);
     // free(sortedLMSBlocks);
     // free(shorterString);
-    printf("recursion");
-    printSA(finalSA, len);
     *output = finalSA;
 }
 
 
 int main() {
-    char* str = "banana";
+    char* str = "CGACTCCAACAACAAGCT";
     int len = strlen(str) + 1;
-    // int* suffixArray = naiveSA(str, len);
-    // printSA(suffixArray, len);
+    int* naiveSuffixArray = naiveSA(str, len);
+    printf("naive: \n");
+    printSA(naiveSuffixArray, len);
     int* suffixArray = malloc(len*sizeof(int));
     int* convertedString = convertString(str, len);
-    printSA(convertedString, len);
     SAIS(convertedString, len, 256, &suffixArray); //assumes 256 alphabet initially
     printSA(suffixArray, len);
     return 0;
 }
-
-// // Place sorted LMS suffixes in character buckets
-// void inducedSortLMS(char* str, int len, int alphabetSize, int* sortedLMS, int numLMS, int* bucketSizes, char* typemap, int* output){
-
-//     int* bucketTails = (int*)calloc(alphabetSize, sizeof(int));
-//     findBucketTails(bucketSizes, alphabetSize, bucketTails);
-
-//     memset(output, -1, len * sizeof(int));
-
-//     for (int i = 0; i < numLMS, i++;) {
-//             int c = str[sortedLMS[i]];
-//             output[bucketTails[c]] = i;
-//             bucketTails[c]--;
-//     }
-//     output[0] = len; //empty suffix at front
-//     free(bucketTails);
-// }
-
-// // Place L-type suffixes
-// void inducedSortL(char* str, int len, int alphabetSize, int* SA, int* bucketSizes, char* typemap) {
-//     int* bucketHeads = (int*)calloc(alphabetSize, sizeof(int));
-//     findBucketHeads(bucketSizes, alphabetSize, bucketHeads);
-
-//     for (int i = 0; i < len; i++) {
-//         if (SA[i] > 0 && typemap[SA[i] - 1] == 'L') {
-//             int c = str[SA[i] - 1];
-//             SA[bucketHeads[c]] = SA[i] - 1;
-//             bucketHeads[c]++;
-//         }
-//     }
-//     free(bucketHeads);
-// }
-
-// // Place S-type suffixes
-// void inducedSortS(char* str, int len, int alphabetSize, int* SA, int* bucketSizes, char* typemap) {
-//     int* bucketTails = (int*)calloc(alphabetSize, sizeof(int));
-//     findBucketTails(bucketSizes, alphabetSize, bucketTails);
-
-//     for (int i = len - 1; i >= 0; i--) {
-//         if (SA[i] > 0 && typemap[SA[i] - 1] == 'S') {
-//             int c = str[SA[i] - 1];
-//             SA[bucketTails[c]] = SA[i] - 1;
-//             bucketTails[c]--;
-//         }
-//     }
-//     free(bucketTails);
-// }

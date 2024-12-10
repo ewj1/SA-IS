@@ -212,7 +212,7 @@ int* extractSortedLMSBlocks(int* SA, int len, int numLMS, char* typemap){
 // Takes sorted LMS blocks and assign each block a character
 // Reorders these characters to the order the blocks appeared in the original string
 int* createShorterString(int* str, int len, int* sortedLMSBlocks, int numLMS, char* typemap, int* numBlockIDs) {
-    int blockAssignments[len];
+    int* blockAssignments = malloc(len*sizeof(int));
     int blockID = 0; 
     memset(blockAssignments, -1, len*sizeof(int));
     blockAssignments[len-1] = 0;
@@ -235,6 +235,7 @@ int* createShorterString(int* str, int len, int* sortedLMSBlocks, int numLMS, ch
             j++;
         }
     }
+    free(blockAssignments);
     return shorterString;
 }
 
@@ -278,7 +279,7 @@ int* SAIS(int* str, int len, int alphabetSize, int** output) {
     }
 
     // at this point, SAofShorterString is the sorted order of LMS suffixes
-    int sortedLMSSuffixes[numLMS];
+    int* sortedLMSSuffixes = malloc(numLMS * sizeof(int));
     for (int i = 0; i < numLMS; i++){
         sortedLMSSuffixes[i] = LMSSuffixes[SAofShorterString[i]];
     }
@@ -287,13 +288,14 @@ int* SAIS(int* str, int len, int alphabetSize, int** output) {
     int* finalSA = inducedSort(str, len, alphabetSize, sortedLMSSuffixes, numLMS, bucketSizes, typemap);
 
     // Free allocated memory
+    free(SA);
     free(typemap);
+    free(sortedLMSBlocks);
     free(bucketSizes);
     free(LMSSuffixes);
-    free(SA);
-    free(sortedLMSBlocks);
     free(shorterString);
     free(SAofShorterString);
+    free(sortedLMSSuffixes);
     *output = finalSA;
 }
 
@@ -314,17 +316,7 @@ char* read_file(FILE* file) {
 
 }
 
-int areArraysEqual(int* arr1, int* arr2) {
-    //different lengths
-    if (sizeof(arr1) != sizeof(arr2)) {
-        return 0;
-    }
-    //empty arrays
-    if (!arr1) {
-        return 1;
-    }
-    //check for value mismatch
-    int len = sizeof(arr1)/sizeof(arr1[0]);
+int areArraysEqual(int* arr1, int* arr2, int len) {
     for (int i = 0; i < len; i++) {
         if (arr1[i] != arr2[i]) {
             return 0;
@@ -351,11 +343,11 @@ int main(int argc, char* argv[]) {
     fclose(file);
     // char* str = "CGACTCCA ACAACAAGCT";
     int len = strlen(str) + 1;
-     printf("Last 4 characters of string: ");
-    for (int i = len - 5; i <= len; i++) {
-       printf("%c ", (char)str[i]);
-    }
-    printf("\n");
+    // printf("Last 4 characters of string: ");
+    // for (int i = len - 5; i < len; i++) {
+    //    printf("%d ", (int)str[i]);
+    // }
+    // printf("\n");
     int* naiveSuffixArray = naiveSA(str, len);
     // printf("Naive ");
     // printSA(naiveSuffixArray, len);
@@ -364,7 +356,7 @@ int main(int argc, char* argv[]) {
     SAIS(convertedString, len, 256, &suffixArray); //assumes 256 ASCII alphabet initially
     // printf("SA-IS ");
     // printSA(suffixArray, len);
-    if (areArraysEqual(naiveSuffixArray, suffixArray)) {
+    if (areArraysEqual(naiveSuffixArray, suffixArray, len)) {
         printf("Success\n");
     }
     else {

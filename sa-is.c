@@ -287,26 +287,96 @@ int* SAIS(int* str, int len, int alphabetSize, int** output) {
     int* finalSA = inducedSort(str, len, alphabetSize, sortedLMSSuffixes, numLMS, bucketSizes, typemap);
 
     // Free allocated memory
-    // free(typemap);
-    // free(bucketSizes);
-    // free(LMSSuffixes);
-    // free(SA);
-    // free(sortedLMSBlocks);
-    // free(shorterString);
+    free(typemap);
+    free(bucketSizes);
+    free(LMSSuffixes);
+    free(SA);
+    free(sortedLMSBlocks);
+    free(shorterString);
+    free(SAofShorterString);
     *output = finalSA;
 }
 
+//convert file text to string
+char* read_file(FILE* file) {
+    fseek(file, 0, SEEK_END);
+    int len = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    char* str = malloc(sizeof(char)*(len + 1));
+    char c;
+    int i = 0;
+    while ( (c = fgetc(file)) != EOF) {
+        str[i] = c;
+        i++;
+    }
+    str[i] = '\0';
+    return str;
 
-int main() {
-    char* str = "CGACTCCAACAACAAGCT";
+}
+
+int areArraysEqual(int* arr1, int* arr2) {
+    //different lengths
+    if (sizeof(arr1) != sizeof(arr2)) {
+        return 0;
+    }
+    //empty arrays
+    if (!arr1) {
+        return 1;
+    }
+    //check for value mismatch
+    int len = sizeof(arr1)/sizeof(arr1[0]);
+    for (int i = 0; i < len; i++) {
+        if (arr1[i] != arr2[i]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int main(int argc, char* argv[]) {
+
+    if(argc != 2) {
+        printf("Need one arguments when calling executable; %d given.\n", argc - 1);
+        printf("Expected a filename which refers to the file containing the string.\n");
+        //end program with error code
+        exit(1);
+    }
+
+    FILE* file = fopen(argv[1], "r"); 
+    if(file == NULL){
+        printf("Error opening file %s.\n", argv[1]);
+        exit(0);
+    }
+    char* str = read_file(file);
+    fclose(file);
+    // char* str = "CGACTCCA ACAACAAGCT";
     int len = strlen(str) + 1;
+     printf("Last 4 characters of string: ");
+    for (int i = len - 5; i <= len; i++) {
+       printf("%c ", (char)str[i]);
+    }
+    printf("\n");
     int* naiveSuffixArray = naiveSA(str, len);
-    printf("Naive ");
-    printSA(naiveSuffixArray, len);
+    // printf("Naive ");
+    // printSA(naiveSuffixArray, len);
     int* suffixArray = malloc(len*sizeof(int));
     int* convertedString = convertString(str, len); //we convert to allow for recursive (integer) inputs later
     SAIS(convertedString, len, 256, &suffixArray); //assumes 256 ASCII alphabet initially
-    printf("SA-IS ");
-    printSA(suffixArray, len);
+    // printf("SA-IS ");
+    // printSA(suffixArray, len);
+    if (areArraysEqual(naiveSuffixArray, suffixArray)) {
+        printf("Success\n");
+    }
+    else {
+        printf("Naive ");
+        printSA(naiveSuffixArray, len);
+        printf("SA-IS ");
+        printSA(suffixArray, len);
+        printf("Different suffix arrays from naive and SA-IS algorithms.\n");
+    }
+    free(naiveSuffixArray);
+    free(suffixArray);
+    free(convertedString);
+    free(str);
     return 0;
 }
